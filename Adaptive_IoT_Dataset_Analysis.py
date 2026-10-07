@@ -2,15 +2,11 @@
 Adaptive AI-Based Edge–Fog–Cloud IoT Framework
 Dataset Analysis Script
 
-Windows dataset path:
-C:\RM paper work\dataset.csv
-
-Install:
-pip install pandas numpy matplotlib scikit-learn
+Run with --dataset <path-to-csv>; see README.md for required columns.
 """
 
 from pathlib import Path
-import warnings
+import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,20 +18,72 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-warnings.filterwarnings("ignore")
-
 # ============================================================
 # 1. LOAD DATASET
 # ============================================================
-DATA_PATH = Path(r"C:\RM paper work\dataset.csv")
+parser = argparse.ArgumentParser(
+    description="Analyze smart-city indicators and simulate workload placement."
+)
+parser.add_argument(
+    "--dataset",
+    type=Path,
+    default=Path(__file__).resolve().with_name("dataset.csv"),
+    help="CSV dataset path (default: dataset.csv beside this script).",
+)
+parser.add_argument(
+    "--output-dir",
+    type=Path,
+    default=Path.cwd(),
+    help="Directory for generated charts and CSV results (default: current directory).",
+)
+parser.add_argument(
+    "--no-show",
+    action="store_true",
+    help="Save plots without opening interactive plot windows.",
+)
+args = parser.parse_args()
+
+DATA_PATH = args.dataset.expanduser().resolve()
+OUTPUT_DIR = args.output_dir.expanduser().resolve()
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 if not DATA_PATH.exists():
     raise FileNotFoundError(
         f"Dataset not found: {DATA_PATH}\n"
-        "Check the path or change DATA_PATH."
+        "Pass its location with --dataset <path-to-csv>."
     )
 
 df = pd.read_csv(DATA_PATH)
+required_columns = [
+    "Smart_Mobility",
+    "Smart_Environment",
+    "Smart_Government",
+    "Smart_Economy",
+    "Smart_People",
+    "Smart_Living",
+    "SmartCity_Index",
+]
+missing_columns = sorted(set(required_columns) - set(df.columns))
+if missing_columns:
+    raise ValueError(
+        "Dataset is missing required columns: "
+        + ", ".join(missing_columns)
+    )
+
+for column in required_columns:
+    df[column] = pd.to_numeric(df[column], errors="coerce")
+
+df = df.dropna(subset=["SmartCity_Index"]).copy()
+if len(df) < 5:
+    raise ValueError(
+        "Dataset must contain at least 5 rows with a numeric SmartCity_Index "
+        "for the 5-fold cross-validation."
+    )
+empty_features = [column for column in required_columns[:-1] if df[column].notna().sum() == 0]
+if empty_features:
+    raise ValueError(
+        "Dataset has no numeric values for: " + ", ".join(empty_features)
+    )
 
 print("=" * 70)
 print("ADAPTIVE AI EDGE–FOG–CLOUD IoT DATASET ANALYSIS")
@@ -89,8 +137,6 @@ PILLARS = [
     "Smart_Living"
 ]
 
-PILLARS = [c for c in PILLARS if c in df.columns]
-
 print("\n--- SMART-CITY PILLARS ---")
 print(PILLARS)
 
@@ -101,7 +147,7 @@ summary = df[PILLARS].agg(["mean", "std", "min", "max"]).T
 print("\n--- PILLAR SUMMARY ---")
 print(summary.round(2))
 
-summary.to_csv("pillar_summary.csv")
+summary.to_csv(OUTPUT_DIR / "pillar_summary.csv")
 
 # Average pillar plot
 df[PILLARS].mean().sort_values(ascending=False).plot(
@@ -112,8 +158,10 @@ plt.ylabel("Mean Value")
 plt.xlabel("Smart-City Pillar")
 plt.xticks(rotation=30)
 plt.tight_layout()
-plt.savefig("average_pillar_scores.png", dpi=300)
-plt.show()
+plt.savefig(OUTPUT_DIR / "average_pillar_scores.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 # Boxplot
 df[PILLARS].plot(kind="box", figsize=(12, 6))
@@ -121,8 +169,10 @@ plt.title("Distribution of Smart-City Pillar Variables")
 plt.ylabel("Value")
 plt.xticks(rotation=25)
 plt.tight_layout()
-plt.savefig("pillar_boxplot.png", dpi=300)
-plt.show()
+plt.savefig(OUTPUT_DIR / "pillar_boxplot.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 # ============================================================
 # 6. CORRELATION
@@ -133,7 +183,7 @@ corr = corr_data.corr()
 print("\n--- CORRELATION MATRIX ---")
 print(corr.round(4))
 
-corr.to_csv("correlation_matrix.csv")
+corr.to_csv(OUTPUT_DIR / "correlation_matrix.csv")
 
 plt.figure(figsize=(10, 8))
 plt.imshow(corr, interpolation="nearest", aspect="auto")
@@ -142,8 +192,10 @@ plt.yticks(range(len(corr.index)), corr.index)
 plt.colorbar(label="Correlation")
 plt.title("Correlation Matrix")
 plt.tight_layout()
-plt.savefig("correlation_matrix.png", dpi=300)
-plt.show()
+plt.savefig(OUTPUT_DIR / "correlation_matrix.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 index_corr = (
     corr["SmartCity_Index"]
@@ -232,8 +284,10 @@ plt.xlabel("Actual SmartCity Index")
 plt.ylabel("Predicted SmartCity Index")
 plt.title("Actual vs Predicted SmartCity Index")
 plt.tight_layout()
-plt.savefig("actual_vs_predicted.png", dpi=300)
-plt.show()
+plt.savefig(OUTPUT_DIR / "actual_vs_predicted.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 # ============================================================
 # 10. FEATURE IMPORTANCE
@@ -248,7 +302,7 @@ importance = pd.Series(
 print("\n--- FEATURE IMPORTANCE ---")
 print(importance.round(4))
 
-importance.to_csv("feature_importance.csv")
+importance.to_csv(OUTPUT_DIR / "feature_importance.csv")
 
 importance.sort_values().plot(
     kind="barh",
@@ -257,8 +311,10 @@ importance.sort_values().plot(
 plt.title("Random Forest Feature Importance")
 plt.xlabel("Importance")
 plt.tight_layout()
-plt.savefig("feature_importance.png", dpi=300)
-plt.show()
+plt.savefig(OUTPUT_DIR / "feature_importance.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 # ============================================================
 # 11. SMARTCITY INDEX TREND
@@ -270,8 +326,10 @@ plt.xlabel("Observation")
 plt.ylabel("SmartCity Index")
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig("smartcity_index_trend.png", dpi=300)
-plt.show()
+plt.savefig(OUTPUT_DIR / "smartcity_index_trend.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 # ============================================================
 # 12. PROXY-BASED ADAPTIVE ORCHESTRATION
@@ -293,12 +351,17 @@ def minmax(series):
     return (series - series.min()) / denominator
 
 
+simulation_features = df[PILLARS].fillna(df[PILLARS].median())
 norm = pd.DataFrame(index=df.index)
 
 for col in PILLARS:
-    norm[col] = minmax(df[col])
+    norm[col] = minmax(simulation_features[col])
 
-# Proxy definitions
+# Proxy definitions.
+#
+# These normalized indicators are not operational telemetry. They let the
+# demonstration compare conceptual workload priorities without claiming
+# measured latency, capacity, security, privacy, or resilience.
 urgency = (
     0.60 * norm["Smart_Mobility"] +
     0.40 * norm["Smart_Environment"]
@@ -312,7 +375,7 @@ privacy = (
     0.25 * norm["Smart_Living"]
 )
 
-# Objective weights
+# Objective weights (sum to 1.0). These are illustrative policy choices.
 ALPHA = 0.30  # latency
 BETA = 0.20   # resource
 GAMMA = 0.20  # security
@@ -331,26 +394,26 @@ for i in df.index:
     candidates = {
         "Edge": {
             "latency": 0.15 + 0.15 * (1-u),
-            "resource": 0.30 + 0.55 * c,
-            "security": 0.30 + 0.35 * p,
-            "privacy": 0.10 + 0.15 * (1-p),
-            "resilience": 0.35
+            "resource": 0.25 + 0.65 * c,
+            "security": 0.45,
+            "privacy": 0.05 + 0.15 * (1-p),
+            "resilience": 0.35,
         },
 
         "Fog": {
             "latency": 0.35 + 0.15 * (1-u),
-            "resource": 0.20 + 0.35 * c,
-            "security": 0.25 + 0.25 * p,
-            "privacy": 0.25 + 0.10 * (1-p),
-            "resilience": 0.20
+            "resource": 0.30 + 0.30 * c,
+            "security": 0.65,
+            "privacy": 0.20 + 0.10 * (1-p),
+            "resilience": 0.60,
         },
 
         "Cloud": {
             "latency": 0.65 + 0.20 * (1-u),
-            "resource": 0.10 + 0.15 * c,
-            "security": 0.20 + 0.15 * p,
-            "privacy": 0.55 + 0.15 * p,
-            "resilience": 0.10
+            "resource": 0.05 + 0.05 * c,
+            "security": 0.85,
+            "privacy": 0.70 + 0.25 * p,
+            "resilience": 0.90,
         }
     }
 
@@ -358,12 +421,14 @@ for i in df.index:
 
     for layer, v in candidates.items():
 
+        # Latency, resource use, and privacy are costs; security and
+        # resilience are benefits that should be maximized.
         score = (
             ALPHA * v["latency"] +
             BETA * v["resource"] +
-            GAMMA * v["security"] +
+            GAMMA * (1 - v["security"]) +
             DELTA * v["privacy"] +
-            EPSILON * v["resilience"]
+            EPSILON * (1 - v["resilience"])
         )
 
         scores[layer] = score
@@ -412,7 +477,7 @@ print(
 )
 
 analysis_results.to_csv(
-    "adaptive_orchestration_analysis_results.csv",
+    OUTPUT_DIR / "adaptive_orchestration_analysis_results.csv",
     index=False
 )
 
@@ -425,11 +490,10 @@ plt.xlabel("Processing Layer")
 plt.ylabel("Number of Records")
 plt.xticks(rotation=0)
 plt.tight_layout()
-plt.savefig(
-    "simulated_workload_placement.png",
-    dpi=300
-)
-plt.show()
+plt.savefig(OUTPUT_DIR / "simulated_workload_placement.png", dpi=300)
+if not args.no_show:
+    plt.show()
+plt.close()
 
 # ============================================================
 # 13. MANUSCRIPT RESULT SUMMARY
@@ -438,7 +502,7 @@ print("\n" + "=" * 70)
 print("MANUSCRIPT-READY RESULTS")
 print("=" * 70)
 
-print(f"Dataset size: {len(df)} records × {len(pd.read_csv(DATA_PATH).columns)} columns")
+print(f"Dataset size: {len(df)} records × {len(df.columns)} columns")
 print("Missing values:", int(df.isna().sum().sum()))
 print("Duplicate rows:", int(df.duplicated().sum()))
 
